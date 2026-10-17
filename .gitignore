@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+crawl_state.json
+crawl_state.db
+crawl_state.db-*
+STATE/
+STATUS.json
+STATUS.log
+# code-only repo: crawling corpora never belong inside the playbook repo
+docs/
+seeds/
+tools/scrapegraph-ai/

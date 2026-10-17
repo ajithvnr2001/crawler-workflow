@@ -1,0 +1,41 @@
+name: daily-docs-update
+on:
+  schedule:
+    - cron: "30 7 * * *"   # stagger across the family — never share a cron minute with a sibling repo
+  workflow_dispatch: {}    # the test button: dispatch it the minute you push (see WORKFLOW.md §8.4)
+permissions:
+  contents: write          # Actions[bot] commits; nothing more needed
+concurrency:
+  group: daily-docs-update # serial by design; cancel-in-progress=false (never kill a mid-push run)
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # big lastmod-refresh days need room; also kills zombie hangs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium   # crawl4ai fallback level needs it
+      - name: Incremental update (new + lastmod-stale only — never a recrawl)
+        run: python3 update_incremental.py --concurrency 10
+      - name: Commit and push if changed
+        # push-retry with rebase: sibling runs can collide; only the two stamp files
+        # ever conflict, and ours are strictly newer → keep --ours on those only.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ README.md guide_code/README.md
+          git diff --cached --quiet && echo "no changes" || (
+            git commit -m "chore: daily docs update $(date -u +%F)" && (
+              git push
+              || (git fetch origin main
+                  && (git rebase origin/main
+                      || (git checkout --ours -- docs/_last_verified.json docs/_manifest.json
+                          && git add -u
+                          && GIT_EDITOR=true git rebase --continue))
+                  && git push)))
